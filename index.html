@@ -84,6 +84,10 @@
   .btn-confirm:active { opacity: 0.8; }
   .btn-confirm:disabled { opacity: 0.5; }
   .btn-skip { width: 100%; margin-top: 8px; padding: 10px; font-size: 14px; border-radius: var(--radius-sm); border: 0.5px solid rgba(0,0,0,0.15); background: transparent; font-family: 'Heebo', sans-serif; font-weight: 500; color: var(--text-secondary); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .btn-stay { width: 100%; margin-top: 14px; padding: 14px; font-size: 16px; border-radius: var(--radius-sm); border: none; font-family: 'Heebo', sans-serif; font-weight: 700; cursor: pointer; -webkit-tap-highlight-color: transparent; background: var(--text-primary); color: #fff; }
+  .btn-stay:active { opacity: 0.8; }
+  .btn-move-subtle { width: 100%; margin-top: 8px; padding: 10px; font-size: 14px; border-radius: var(--radius-sm); border: 0.5px solid rgba(0,0,0,0.15); background: transparent; font-family: 'Heebo', sans-serif; font-weight: 500; color: var(--text-secondary); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .btn-move-subtle:disabled { opacity: 0.5; }
 
   .loading-card { width: 100%; max-width: 440px; padding: 2rem; text-align: center; color: var(--text-secondary); font-size: 14px; }
   .spinner { width: 24px; height: 24px; border: 2px solid rgba(0,0,0,0.12); border-top-color: var(--text-primary); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
@@ -288,7 +292,6 @@ function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLo
 
   if (soldAndWash) {
     // Override badge to show both statuses
-    const soldAndWashBadgeEl = html.indexOf('status-badge');
     html = html.replace(`<span class="status-badge">${badge}</span>`, `<span class="status-badge">${badge} · בחפיפה</span>`);
     html += `<div class="detail-row"><span class="dk">מיקום נוכחי</span><span class="dv">בחפיפה</span></div>`;
     html += `
@@ -301,12 +304,12 @@ function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLo
       <button class="btn-skip" onclick="reset()">השאירי כמו שזה</button>`;
   } else if (type === 'storage') {
     html += `
-      <button class="btn-confirm display" id="confirmBtn" onclick="confirmAction('${id}','פאה בתצוגה','העברה לתצוגה','${encodeURIComponent(desc)}','','${webhookCurrentLoc}')">✓ העברי לתצוגה</button>
-      <button class="btn-skip" onclick="reset()">השאירי כמו שזה</button>`;
+      <button class="btn-stay" onclick="reset()">✓ השאירי כמו שזה</button>
+      <button class="btn-move-subtle" id="confirmBtn" onclick="confirmAction('${id}','פאה בתצוגה','העברה לתצוגה','${encodeURIComponent(desc)}','','${webhookCurrentLoc}')">העברי לתצוגה</button>`;
   } else if (type === 'none') {
     html += `
-      <button class="btn-confirm" id="confirmBtn" onclick="confirmAction('${id}','פאה במגירה','להעביר לאחסון','${encodeURIComponent(desc)}','','${webhookCurrentLoc}')">✓ העברי לאחסון</button>
-      <button class="btn-skip" onclick="reset()">השאירי כמו שזה</button>`;
+      <button class="btn-stay" onclick="reset()">✓ השאירי כמו שזה</button>
+      <button class="btn-move-subtle" id="confirmBtn" onclick="confirmAction('${id}','פאה במגירה','להעביר לאחסון','${encodeURIComponent(desc)}','','${webhookCurrentLoc}')">העברי לאחסון</button>`;
   } else if (zohoVal) {
     html += `
       <button class="btn-confirm ${confirmCls}" id="confirmBtn" onclick="confirmAction('${id}','${zohoVal}','${mainText}','${encodeURIComponent(desc)}','${encodeURIComponent(helperLoc || '')}','${webhookCurrentLoc}')">✓ אישור — ביצעתי את הפעולה</button>
