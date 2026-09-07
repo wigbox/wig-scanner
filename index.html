@@ -10,6 +10,7 @@
 <title>סורק פאות</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -40,6 +41,8 @@
   .input-row input::placeholder { color: var(--text-hint); font-size: 15px; font-weight: 400; }
   .btn { padding: 12px 16px; background: var(--text-primary); color: #fff; border: none; border-radius: var(--radius-sm); font-family: 'Heebo', sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
   .btn:active { opacity: 0.8; }
+  .btn-scan { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 10px; padding: 12px 16px; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: 'Heebo', sans-serif; font-size: 15px; font-weight: 500; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .btn-scan:active { opacity: 0.7; }
   .hint { font-size: 12px; color: var(--text-hint); text-align: center; margin-top: 8px; }
 
   .result-card { width: 100%; max-width: 440px; border-radius: var(--radius); padding: 1.5rem; border: 1px solid; animation: fadeIn 0.2s ease; }
@@ -78,6 +81,8 @@
   .detail-row + .detail-row { border-top: 0.5px solid rgba(0,0,0,0.08); }
   .dk { font-size: 13px; color: rgba(0,0,0,0.45); white-space: nowrap; }
   .dv { font-size: 13px; font-weight: 500; color: var(--text-primary); text-align: left; word-break: break-word; }
+  .err-detail { font-size: 12px; color: rgba(0,0,0,0.6); background: rgba(0,0,0,0.04); border-radius: 8px; padding: 8px 10px; margin-top: 10px; text-align: right; line-height: 1.5; }
+  .err-detail a { color: #0C447C; text-decoration: underline; }
 
   .btn-confirm { width: 100%; margin-top: 14px; padding: 14px; font-size: 16px; border-radius: var(--radius-sm); border: none; font-family: 'Heebo', sans-serif; font-weight: 700; cursor: pointer; -webkit-tap-highlight-color: transparent; background: #854F0B; color: #fff; }
   .btn-confirm.display { background: #185FA5; }
@@ -93,6 +98,17 @@
   .spinner { width: 24px; height: 24px; border: 2px solid rgba(0,0,0,0.12); border-top-color: var(--text-primary); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .footer { margin-top: auto; padding-top: 2rem; font-size: 11px; color: var(--text-hint); text-align: center; }
+
+  /* Scanner overlay */
+  .scan-overlay { position: fixed; inset: 0; background: #000; z-index: 1000; display: flex; flex-direction: column; }
+  .scan-overlay.hidden { display: none; }
+  .scan-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; color: #fff; }
+  .scan-header span { font-size: 15px; font-weight: 500; }
+  .scan-close { background: rgba(255,255,255,0.15); border: none; color: #fff; width: 34px; height: 34px; border-radius: 50%; font-size: 18px; cursor: pointer; }
+  #qr-reader { flex: 1; width: 100%; }
+  #qr-reader video { object-fit: cover; }
+  .scan-hint { color: rgba(255,255,255,0.7); text-align: center; font-size: 13px; padding: 12px 16px 20px; }
+  .scan-error { color: #ffb3b3; text-align: center; font-size: 13px; padding: 0 16px 16px; }
 </style>
 </head>
 <body>
@@ -108,11 +124,22 @@
       <input type="number" id="wigInput" placeholder="הקלידי מספר פאה..." inputmode="numeric" autocomplete="off" />
       <button class="btn" onclick="lookup()">בדיקה</button>
     </div>
-    <p class="hint">הקלידי מספר פאה ידנית</p>
+    <button class="btn-scan" onclick="openScanner()">📷 סריקת ברקוד</button>
+    <p class="hint">הקלידי מספר פאה ידנית או סרקי ברקוד</p>
   </div>
 
   <div id="result"></div>
   <div class="footer">wigbox · Extra Inventory Management</div>
+</div>
+
+<div class="scan-overlay hidden" id="scanOverlay">
+  <div class="scan-header">
+    <span>סריקת ברקוד</span>
+    <button class="scan-close" onclick="closeScanner()">✕</button>
+  </div>
+  <div id="qr-reader"></div>
+  <div class="scan-error" id="scanError"></div>
+  <div class="scan-hint">כווני את המצלמה לברקוד של הפאה</div>
 </div>
 
 <script>
@@ -121,6 +148,12 @@ const HELPER_GID  = '1611029800';
 const MASTER_GID  = '1059386396';
 const STORAGE_GID = '450172942';
 const WEBHOOK     = 'https://hook.integrator.boost.space/99xaelrc8ix1v3iu6tg6uw53ndwm7267';
+
+const SHEETS = [
+  { name: 'MASTER_DATA', gid: MASTER_GID },
+  { name: 'STORAGE_DATA', gid: STORAGE_GID },
+  { name: 'HELPER',       gid: HELPER_GID }
+];
 
 const wigInput  = document.getElementById('wigInput');
 const resultDiv = document.getElementById('result');
@@ -138,12 +171,31 @@ window.addEventListener('load', () => {
   }
 });
 
-async function fetchCSV(gid) {
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}&t=${Date.now()}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('fetch failed');
-  const text = await res.text();
-  return parseCSVAll(text);
+function csvUrl(gid) {
+  // gviz/tq is Google's public query endpoint for Sheets — unlike /export?format=csv
+  // (built for the Sheets UI's own download button), this one is served with CORS
+  // headers that allow cross-origin fetch() from another website.
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${gid}&t=${Date.now()}`;
+}
+
+// Fetches one sheet and reports back either { rows } or { error } — never throws,
+// so one broken tab/permission doesn't take down the whole lookup silently.
+async function fetchCSV(name, gid) {
+  const url = csvUrl(gid);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      return { name, gid, error: `HTTP ${res.status}`, url };
+    }
+    const text = await res.text();
+    const trimmed = text.trim();
+    if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || /accounts\.google\.com/i.test(trimmed.slice(0, 500))) {
+      return { name, gid, error: 'התקבל דף התחברות של גוגל במקום CSV — הגיליון כנראה לא משותף כ"כל מי שיש לו את הקישור"', url };
+    }
+    return { name, gid, rows: parseCSVAll(text) };
+  } catch (e) {
+    return { name, gid, error: e.message || 'הבקשה נכשלה (ייתכן חסימת רשת/CORS)', url };
+  }
 }
 
 function parseCSVAll(text) {
@@ -191,14 +243,21 @@ async function lookup() {
 
   resultDiv.innerHTML = `<div class="loading-card"><div class="spinner"></div>טוענת נתונים...</div>`;
 
-  try {
-    // Fetch all three sheets in parallel
-    const [masterRows, storageRows, helperRows] = await Promise.all([
-      fetchCSV(MASTER_GID),
-      fetchCSV(STORAGE_GID),
-      fetchCSV(HELPER_GID)
-    ]);
+  const [masterRes, storageRes, helperRes] = await Promise.all(
+    SHEETS.map(s => fetchCSV(s.name, s.gid))
+  );
 
+  const failed = [masterRes, storageRes, helperRes].filter(r => r.error);
+  if (failed.length) {
+    showLoadError(failed);
+    return;
+  }
+
+  const masterRows  = masterRes.rows;
+  const storageRows = storageRes.rows;
+  const helperRows  = helperRes.rows;
+
+  try {
     // 1. Check MASTER_DATA (col C = index 2 is wig id, col D = index 3 is status)
     const masterMatch = masterRows.slice(1).find(r => r[2] && r[2].trim() === id);
     if (!masterMatch) {
@@ -253,10 +312,26 @@ async function lookup() {
     resultDiv.innerHTML = `
       <div class="result-card c-error">
         <span class="status-badge">שגיאה</span>
-        <div class="result-action">לא ניתן לטעון נתונים</div>
-        <div class="detail-row"><span class="dk">בדקי חיבור לאינטרנט ונסי שוב</span><span class="dv"></span></div>
+        <div class="result-action">שגיאה בעיבוד הנתונים</div>
+        <div class="err-detail">${(e.message || e).toString()}</div>
       </div>`;
   }
+}
+
+function showLoadError(failed) {
+  const items = failed.map(f => `
+    <div class="err-detail">
+      <strong>${f.name}</strong>: ${f.error}<br>
+      <a href="${f.url}" target="_blank" rel="noopener">בדיקת הקישור ישירות ←</a>
+    </div>`).join('');
+  resultDiv.innerHTML = `
+    <div class="result-card c-error">
+      <span class="status-badge">שגיאה</span>
+      <div class="result-action">לא ניתן לטעון נתונים</div>
+      <div class="detail-row"><span class="dk">בדקי הרשאות שיתוף בגיליון (Anyone with the link)</span><span class="dv"></span></div>
+      ${items}
+      <button class="btn-skip" onclick="lookup()" style="margin-top:14px;">↻ נסי שוב</button>
+    </div>`;
 }
 
 function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLoc, soldAndWash, webhookCurrentLoc) {
@@ -353,6 +428,53 @@ function reset() {
   wigInput.value = '';
   wigInput.focus();
   window.history.replaceState({}, document.title, window.location.pathname);
+}
+
+// ---- Barcode scanning ----
+let html5QrCode = null;
+let scannerRunning = false;
+
+async function openScanner() {
+  const overlay = document.getElementById('scanOverlay');
+  const errEl = document.getElementById('scanError');
+  errEl.textContent = '';
+  overlay.classList.remove('hidden');
+
+  if (typeof Html5Qrcode === 'undefined') {
+    errEl.textContent = 'ספריית הסריקה לא נטענה — בדקי חיבור לאינטרנט ונסי שוב';
+    return;
+  }
+
+  try {
+    html5QrCode = new Html5Qrcode('qr-reader');
+    const config = { fps: 10, qrbox: { width: 260, height: 160 } };
+    await html5QrCode.start(
+      { facingMode: 'environment' },
+      config,
+      onScanSuccess,
+      () => {} // ignore per-frame "not found" errors
+    );
+    scannerRunning = true;
+  } catch (e) {
+    errEl.textContent = 'לא ניתן לגשת למצלמה — ודאי שאישרת הרשאת מצלמה לדפדפן';
+  }
+}
+
+async function closeScanner() {
+  const overlay = document.getElementById('scanOverlay');
+  if (html5QrCode && scannerRunning) {
+    try { await html5QrCode.stop(); html5QrCode.clear(); } catch(e) {}
+    scannerRunning = false;
+  }
+  overlay.classList.add('hidden');
+}
+
+function onScanSuccess(decodedText) {
+  const digits = (decodedText || '').replace(/\D/g, '');
+  if (!digits) return;
+  closeScanner();
+  wigInput.value = digits;
+  lookup();
 }
 </script>
 </body>
