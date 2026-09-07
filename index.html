@@ -143,16 +143,18 @@
 </div>
 
 <script>
-const SHEET_ID    = '1GaCqafFxWIAVYZgZ-pKSPX3LmDvgkGnUuZZeqDVk6eo';
-const HELPER_GID  = '1611029800';
-const MASTER_GID  = '1059386396';
-const STORAGE_GID = '450172942';
-const WEBHOOK     = 'https://hook.integrator.boost.space/99xaelrc8ix1v3iu6tg6uw53ndwm7267';
+const SHEET_ID       = '1GaCqafFxWIAVYZgZ-pKSPX3LmDvgkGnUuZZeqDVk6eo';
+const MASTER_GID     = '1059386396';
+const STORAGE_GID    = '450172942';
+const TO_DISPLAY_GID = '731318979';  // tab "לתצוגה" — wigs pending move to display
+const TO_STORAGE_GID = '1556036128'; // tab "לאחסון" — wigs pending move to storage
+const WEBHOOK        = 'https://hook.integrator.boost.space/99xaelrc8ix1v3iu6tg6uw53ndwm7267';
 
 const SHEETS = [
-  { name: 'MASTER_DATA', gid: MASTER_GID },
+  { name: 'MASTER_DATA',  gid: MASTER_GID },
   { name: 'STORAGE_DATA', gid: STORAGE_GID },
-  { name: 'HELPER',       gid: HELPER_GID }
+  { name: 'לתצוגה',       gid: TO_DISPLAY_GID },
+  { name: 'לאחסון',       gid: TO_STORAGE_GID }
 ];
 
 const wigInput  = document.getElementById('wigInput');
@@ -243,19 +245,20 @@ async function lookup() {
 
   resultDiv.innerHTML = `<div class="loading-card"><div class="spinner"></div>טוענת נתונים...</div>`;
 
-  const [masterRes, storageRes, helperRes] = await Promise.all(
+  const [masterRes, storageRes, toDisplayRes, toStorageRes] = await Promise.all(
     SHEETS.map(s => fetchCSV(s.name, s.gid))
   );
 
-  const failed = [masterRes, storageRes, helperRes].filter(r => r.error);
+  const failed = [masterRes, storageRes, toDisplayRes, toStorageRes].filter(r => r.error);
   if (failed.length) {
     showLoadError(failed);
     return;
   }
 
-  const masterRows  = masterRes.rows;
-  const storageRows = storageRes.rows;
-  const helperRows  = helperRes.rows;
+  const masterRows     = masterRes.rows;
+  const storageRows    = storageRes.rows;
+  const toDisplayRows  = toDisplayRes.rows;
+  const toStorageRows  = toStorageRes.rows;
 
   try {
     // 1. Check MASTER_DATA (col C = index 2 is wig id, col D = index 3 is status)
@@ -275,33 +278,40 @@ async function lookup() {
 
     if (masterType !== 'instock') {
       // Check if also in חפיפה — if so, show delete option
-      const storageMatchSold = storageRows.slice(1).find(r => r[1] && r[1].trim() === id);
-      const isSoldAndWash = storageMatchSold && (storageMatchSold[2] || '').trim() === 'חפיפה';
+      const storageMatchSold = storageRows.slice(1).find(r => r[0] && r[0].trim() === id);
+      const isSoldAndWash = storageMatchSold && (storageMatchSold[1] || '').trim() === 'חפיפה';
       showResult(id, masterType, masterLabel, '', '', null, null, isSoldAndWash);
       return;
     }
 
-    // 2. Check STORAGE_DATA (col B = index 1 is wig id, col C = index 2 is status)
-    const storageMatch = storageRows.slice(1).find(r => r[1] && r[1].trim() === id);
+    // 2. Check STORAGE_DATA (col A = index 0 is wig id, col B = index 1 is status)
+    const storageMatch = storageRows.slice(1).find(r => r[0] && r[0].trim() === id);
     let currentLocation = 'בתצוגה'; // default
     let locType = 'none';
 
     if (storageMatch) {
-      const storageStat = (storageMatch[2] || '').trim();
+      const storageStat = (storageMatch[1] || '').trim();
       if (storageStat === 'מגירה') { currentLocation = 'באחסון'; locType = 'storage'; }
       else if (storageStat === 'חפיפה') { currentLocation = 'בחפיפה'; locType = 'wash'; }
     }
 
-    // 3. Check HELPER tab (col A = index 0 is wig id, col D = index 3 is required action)
-    const helperMatch = helperRows.slice(1).find(r => r[0] && r[0].trim() === id);
+    // 3. Check the two action-pending tabs (previously one HELPER tab):
+    // "לתצוגה" = pending move to display, "לאחסון" = pending move to storage
+    // (col A = index 0 description, col B = index 1 wig id, col C = index 2 box/category;
+    // "לאחסון" also has a col D = index 3 "בוצע" done-checkbox — skip rows already marked TRUE)
+    const displayMatch = toDisplayRows.slice(1).find(r => r[1] && r[1].trim() === id);
+    const storageActionMatch = toStorageRows.slice(1).find(r =>
+      r[1] && r[1].trim() === id && (r[3] || '').trim().toUpperCase() !== 'TRUE'
+    );
 
-    if (helperMatch) {
-      const requiredAction = (helperMatch[3] || '').trim();
-      const desc           = (helperMatch[1] || '').trim();
-      const loc            = (helperMatch[2] || '').trim();
-      const isDisplay      = requiredAction.includes('תצוגה');
-      const zohoVal        = isDisplay ? 'פאה בתצוגה' : 'פאה במגירה';
-      showResult(id, 'action', requiredAction, currentLocation, desc, zohoVal, loc, false, currentLocation);
+    if (displayMatch) {
+      const desc = (displayMatch[0] || '').trim();
+      const loc  = (displayMatch[2] || '').trim();
+      showResult(id, 'action', 'העברה לתצוגה', currentLocation, desc, 'פאה בתצוגה', loc, false, currentLocation);
+    } else if (storageActionMatch) {
+      const desc = (storageActionMatch[0] || '').trim();
+      const loc  = (storageActionMatch[2] || '').trim();
+      showResult(id, 'action', 'העברה לאחסון', currentLocation, desc, 'פאה במגירה', loc, false, currentLocation);
     } else {
       // No action needed — show current location
       const noActionText = locType === 'wash' ? 'בחפיפה' : 'אין שינוי נדרש';
