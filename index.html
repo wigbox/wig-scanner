@@ -342,7 +342,11 @@ async function lookup() {
     } else if (drawerMatch) {
       const desc = (drawerMatch[3] || '').trim();
       const loc  = (drawerMatch[2] || '').trim() || shouldBeIn;
-      showResult(id, 'action', 'העברה לאחסון', currentLocation, desc, 'פאה במגירה', loc, false, currentLocation, 'מגירה', loc);
+      // The Boost scenario routes on the exact words of `action` + `current_location`:
+      //   on display -> 'להעביר לאחסון' (route "add row"), in wash -> 'העברה לאחסון' (route "update row").
+      // Do not reword these without changing the filters in Boost.
+      const driverAction = currentLocation === 'בחפיפה' ? 'העברה לאחסון' : 'להעביר לאחסון';
+      showResult(id, 'action', driverAction, currentLocation, desc, 'פאה במגירה', loc, false, currentLocation, 'מגירה', loc);
     } else {
       // No action needed — show current location
       const noActionText = locType === 'wash' ? 'בחפיפה' : 'אין שינוי נדרש';
