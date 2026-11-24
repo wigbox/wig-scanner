@@ -350,7 +350,7 @@ async function lookup() {
     } else {
       // No action needed — show current location
       const noActionText = locType === 'wash' ? 'בחפיפה' : 'אין שינוי נדרש';
-      showResult(id, locType === 'wash' ? 'wash' : locType === 'storage' ? 'storage' : 'none', noActionText, currentLocation, '', null, null, false, '', '', '', drawerRows);
+      showResult(id, locType === 'wash' ? 'wash' : locType === 'storage' ? 'storage' : 'none', noActionText, currentLocation, '', null, null, false, '', '', shouldBeIn, drawerRows);
     }
 
   } catch(e) {
@@ -430,8 +430,13 @@ function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLo
       ${drawerPickerHtml(`'${id}','פאה במגירה','העברה לאחסון','${encodeURIComponent(desc)}','','${webhookCurrentLoc}',''`, '')}
       <button class="btn-skip" onclick="reset()">השאירי כמו שזה</button>`;
   } else if (type === 'storage') {
+    // In a drawer already: leave it, correct which drawer it is in, or move it to display.
+    // Correcting sends action 'עדכון מגירה' — the Boost scenario has a filter for exactly this word (route "update row").
+    const fixArgs = `'${id}','פאה במגירה','עדכון מגירה','${encodeURIComponent(desc)}','','${webhookCurrentLoc}','${encodeURIComponent(plannedDrawer || '')}'`;
     html += `
       <button class="btn-stay" onclick="reset()">✓ השאירי כמו שזה</button>
+      <button class="btn-move-subtle" id="otherDrawerLink" onclick="showOtherDrawer()">הפאה במגירה אחרת — עדכני מגירה</button>
+      ${drawerPickerHtml(fixArgs, '', 'באיזו מגירה הפאה נמצאת עכשיו? (אות ומספר, לדוגמה A3)', '✓ עדכני את המגירה')}
       <button class="btn-move-subtle" id="confirmBtn" onclick="confirmAction('${id}','פאה בתצוגה','העברה לתצוגה','${encodeURIComponent(desc)}','','${webhookCurrentLoc}')">העברי לתצוגה</button>`;
   } else if (type === 'none') {
     html += `
@@ -460,14 +465,14 @@ function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLo
 
 // The hidden "which drawer?" dropdown + confirm button (shown by showOtherDrawer).
 // `common` = the first seven arguments of confirmAction, `exclude` = a drawer to leave out of the list.
-function drawerPickerHtml(common, exclude) {
+function drawerPickerHtml(common, exclude, question, buttonText) {
   return `
       <div id="otherDrawerBox" class="drawer-pick" style="display:none;">
-        <label class="field-label" for="drawerSelect">באיזו מגירה הונחה הפאה? (אות ומספר, לדוגמה A3)</label>
+        <label class="field-label" for="drawerSelect">${question || 'באיזו מגירה הונחה הפאה? (אות ומספר, לדוגמה A3)'}</label>
         <input id="drawerSelect" type="text" maxlength="3" autocomplete="off" autocapitalize="characters" spellcheck="false"
                placeholder="A3" oninput="checkDrawerInput('${exclude || ''}')" />
         <div id="drawerError" class="drawer-error"></div>
-        <button class="btn-confirm" id="confirmOtherBtn" disabled onclick="confirmOtherDrawer(${common})">✓ הנחתי במגירה שהוקלדה</button>
+        <button class="btn-confirm" id="confirmOtherBtn" disabled onclick="confirmOtherDrawer(${common})">${buttonText || '✓ הנחתי במגירה שהוקלדה'}</button>
       </div>`;
 }
 

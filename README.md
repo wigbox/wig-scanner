@@ -36,6 +36,8 @@ If it was put somewhere else, tap **"הונחה במגירה אחרת"**, type t
 | `actual_drawer` | `A3` | The drawer it was really put in (same as planned when it went where asked) |
 | `drawer_changed` | `true` | `true` only when they differ |
 
+**Correcting a drawer.** On the "in storage, no change" card, **"הפאה במגירה אחרת — עדכני מגירה"** lets you type the drawer the wig is really in (for example after it was put in the wrong one). It sends `action` = `עדכון מגירה` with `current_location` = `באחסון`, and the Boost scenario's "update row" route accepts that word and rewrites column C. If the wig has no row in `סטטוס פאות`, nothing is updated.
+
 Other moves into storage (a wig on display, or coming out of wash, with no drawer on the list) also ask which drawer. The box is required, `planned_drawer` is empty and `actual_drawer` holds the choice. Moves to display do not ask for a drawer.
 
 The existing fields (`wig_id`, `action`, `zoho_status`, `description`, `location`, `current_location`, `timestamp`) are unchanged.
