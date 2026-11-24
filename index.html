@@ -307,9 +307,11 @@ async function lookup() {
     // The drawer it was actually placed in (written by Boost into col C of סטטוס פאות; only known for
     // wigs placed with this app). Shown only on "in storage" cards, next to where it should be.
     let drawerRows = [];
+    let placedDrawer = '';   // where Boost recorded it (col C of סטטוס פאות), if anywhere
     if (shouldBeIn) drawerRows.push(['אמורה להיות במגירה', shouldBeIn]);
     if (washMatch && (washMatch[1] || '').trim() === 'מגירה') {
       const placedD = (washMatch[2] || '').trim();
+      placedDrawer = placedD;
       if (placedD) {
         const differs = shouldBeIn && placedD !== shouldBeIn;
         drawerRows.push(['נמצאת במגירה', differs ? `${placedD} ⚠ לא במגירה המתוכננת` : placedD]);
@@ -337,8 +339,11 @@ async function lookup() {
 
     if (displayMatch) {
       const desc = (displayMatch[3] || '').trim();
-      const loc  = (displayMatch[2] || '').trim();
-      showResult(id, 'action', 'העברה לתצוגה', currentLocation, desc, 'פאה בתצוגה', loc, false, currentLocation, 'להוציא ממגירה');
+      // Which drawer is it in now? The list says; otherwise where Boost recorded it; otherwise where it should be.
+      const listDrawer = (displayMatch[2] || '').trim();
+      const nowDrawer = [listDrawer, placedDrawer, shouldBeIn].map(normalizeDrawer).find(isValidDrawer) || '';
+      showResult(id, 'action', 'העברה לתצוגה', currentLocation, desc, 'פאה בתצוגה', nowDrawer, false, currentLocation, 'נמצאת עכשיו במגירה', '',
+        nowDrawer ? null : [['נמצאת עכשיו במגירה', 'לא ידועה']], 'להעביר לתצוגה');
     } else if (drawerMatch) {
       const desc = (drawerMatch[3] || '').trim();
       const loc  = (drawerMatch[2] || '').trim() || shouldBeIn;
@@ -346,7 +351,9 @@ async function lookup() {
       //   on display -> 'להעביר לאחסון' (route "add row"), in wash -> 'העברה לאחסון' (route "update row").
       // Do not reword these without changing the filters in Boost.
       const driverAction = currentLocation === 'בחפיפה' ? 'העברה לאחסון' : 'להעביר לאחסון';
-      showResult(id, 'action', driverAction, currentLocation, desc, 'פאה במגירה', loc, false, currentLocation, 'מגירה', loc);
+      // The card title says where to put it ("להעביר למגירה A1") so it can't be read as "it is in A1".
+      // `driverAction` is what is sent to Boost and must stay exactly as it is.
+      showResult(id, 'action', driverAction, currentLocation, desc, 'פאה במגירה', loc, false, currentLocation, 'מגירה מתוכננת', loc, null, loc ? `להעביר למגירה ${loc}` : 'להעביר למגירה');
     } else {
       // No action needed — show current location
       const noActionText = locType === 'wash' ? 'בחפיפה' : 'אין שינוי נדרש';
@@ -381,7 +388,8 @@ function showLoadError(failed) {
 
 // plannedDrawer: only for "move to a drawer" cards — the drawer the list asked for.
 // drawerRows: only for "no change" cards — [label, value] pairs: the drawer it should be in, and where it was placed.
-function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLoc, soldAndWash, webhookCurrentLoc, locLabel, plannedDrawer, drawerRows) {
+// displayTitle: the heading shown on the card. `mainText` is also what is sent to Boost as `action`, so it cannot be reworded.
+function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLoc, soldAndWash, webhookCurrentLoc, locLabel, plannedDrawer, drawerRows, displayTitle) {
   locLabel = locLabel || 'מגירה';
   webhookCurrentLoc = webhookCurrentLoc || currentLocation || '';
   const cls = `c-${type}`;
@@ -400,7 +408,7 @@ function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLo
   let html = `
     <div class="result-card ${cls}">
       <span class="status-badge">${badge}</span>
-      <div class="result-action">${mainText}</div>`;
+      <div class="result-action">${displayTitle || mainText}</div>`;
 
   if (currentLocation) {
     html += `<div class="detail-row"><span class="dk">מיקום נוכחי</span><span class="dv">${currentLocation}</span></div>`;
