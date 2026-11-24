@@ -337,14 +337,21 @@ async function lookup() {
     const displayMatch = toDisplayRows.slice(1).find(r => r[0] && r[0].trim() === id);
     const drawerMatch  = toDrawerRows.slice(1).find(r => r[0] && r[0].trim() === id);
 
-    if (displayMatch) {
+    // The two lists are formulas that lag behind: a wig that was just moved can stay listed for a few minutes.
+    // If סטטוס פאות already says where it is, trust that and say the list is behind, instead of asking for the same move again.
+    const listLagDisplay = !!displayMatch && locType === 'none';    // already on display
+    const listLagDrawer  = !!drawerMatch && locType === 'storage';  // already in a drawer
+    if (listLagDisplay) drawerRows.unshift(['שימי לב', 'הפאה כבר בתצוגה — הרשימה "להעביר לתצוגה" עדיין לא התעדכנה']);
+    if (listLagDrawer)  drawerRows.unshift(['שימי לב', 'הפאה כבר במגירה — הרשימה "להעביר למגירה" עדיין לא התעדכנה']);
+
+    if (displayMatch && !listLagDisplay) {
       const desc = (displayMatch[3] || '').trim();
       // Which drawer is it in now? The list says; otherwise where Boost recorded it; otherwise where it should be.
       const listDrawer = (displayMatch[2] || '').trim();
       const nowDrawer = [listDrawer, placedDrawer, shouldBeIn].map(normalizeDrawer).find(isValidDrawer) || '';
       showResult(id, 'action', 'העברה לתצוגה', currentLocation, desc, 'פאה בתצוגה', nowDrawer, false, currentLocation, 'נמצאת עכשיו במגירה', '',
         nowDrawer ? null : [['נמצאת עכשיו במגירה', 'לא ידועה']], 'להעביר לתצוגה');
-    } else if (drawerMatch) {
+    } else if (drawerMatch && !listLagDrawer) {
       const desc = (drawerMatch[3] || '').trim();
       const loc  = (drawerMatch[2] || '').trim() || shouldBeIn;
       // The Boost scenario routes on the exact words of `action` + `current_location`:
