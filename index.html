@@ -94,6 +94,10 @@
   .btn-move-subtle { width: 100%; margin-top: 8px; padding: 10px; font-size: 14px; border-radius: var(--radius-sm); border: 0.5px solid rgba(0,0,0,0.15); background: transparent; font-family: 'Heebo', sans-serif; font-weight: 500; color: var(--text-secondary); cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .btn-move-subtle:disabled { opacity: 0.5; }
 
+  .drawer-pick { margin-top: 10px; padding: 12px; background: rgba(255,255,255,0.6); border-radius: var(--radius-sm); }
+  .drawer-error { min-height: 18px; margin: 6px 0; font-size: 12px; color: #A32D2D; }
+  .drawer-pick input { width: 100%; font-family: 'Heebo', sans-serif; font-size: 22px; font-weight: 500; text-transform: uppercase; text-align: center; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary); }
+  .drawer-pick select { width: 100%; font-family: 'Heebo', sans-serif; font-size: 18px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary); }
   .loading-card { width: 100%; max-width: 440px; padding: 2rem; text-align: center; color: var(--text-secondary); font-size: 14px; }
   .spinner { width: 24px; height: 24px; border: 2px solid rgba(0,0,0,0.12); border-top-color: var(--text-primary); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -143,19 +147,31 @@
 </div>
 
 <script>
-const SHEET_ID       = '1GaCqafFxWIAVYZgZ-pKSPX3LmDvgkGnUuZZeqDVk6eo';
-const MASTER_GID     = '1059386396';
-const STORAGE_GID    = '450172942';
-const TO_DISPLAY_GID = '731318979';  // tab "לתצוגה" — wigs pending move to display
-const TO_STORAGE_GID = '1556036128'; // tab "לאחסון" — wigs pending move to storage
-const WEBHOOK        = 'https://hook.integrator.boost.space/99xaelrc8ix1v3iu6tg6uw53ndwm7267';
+// Google Sheet "Storage Management"
+const SHEET_ID      = '1cexgD9BIzu-zX51FFQCuyJ-IlY0O7DlKSVjD3gXXSYw';
+const INVENTORY_GID = '210643961';   // tab "Full Inventory"  — A: S/N, B: Status, C: Location (DISPLAY / STORAGE / Not In Store)
+const WASH_GID      = '2057793530';  // tab "סטטוס פאות"      — A: S/N, B: Location (מגירה / חפיפה)
+const TO_DRAWER_GID = '0';           // tab "למגירה"         — A: S/N, B: action, C: drawer to move to, D: wig code, E: drawer group
+const TO_DISPLAY_GID = '1';          // tab "לתצוגה"         — A: S/N, B: action, C: drawer it is in now, D: wig code, E: drawer group
+const BIN_GID       = '759975009';   // tab "Bin List"       — A: drawer (bin) the wig should be in, B: S/N
+const WEBHOOK       = 'https://hook.integrator.boost.space/99xaelrc8ix1v3iu6tg6uw53ndwm7267';
 
 const SHEETS = [
-  { name: 'MASTER_DATA',  gid: MASTER_GID },
-  { name: 'STORAGE_DATA', gid: STORAGE_GID },
-  { name: 'לתצוגה',       gid: TO_DISPLAY_GID },
-  { name: 'לאחסון',       gid: TO_STORAGE_GID }
+  { name: 'Full Inventory', gid: INVENTORY_GID },
+  { name: 'סטטוס פאות',     gid: WASH_GID },
+  { name: 'לתצוגה',         gid: TO_DISPLAY_GID },
+  { name: 'למגירה',         gid: TO_DRAWER_GID },
+  { name: 'Bin List',       gid: BIN_GID }
 ];
+
+// A drawer code is a letter A–O followed by a number 1–7 (for example A3).
+// The "which drawer" box accepts upper or lower case; anything else is rejected.
+function normalizeDrawer(text) {
+  return (text || '').trim().toUpperCase().replace(/[\s-]/g, '');
+}
+function isValidDrawer(text) {
+  return /^[A-O][1-7]$/.test(normalizeDrawer(text));
+}
 
 const wigInput  = document.getElementById('wigInput');
 const resultDiv = document.getElementById('result');
@@ -223,19 +239,22 @@ function parseCSVRow(row) {
 }
 
 function getMasterStatus(masterStatus) {
-  const s = (masterStatus || '').trim();
-  const soldStatuses    = ['Sold', 'Personal Use', 'Barter'];
-  const returnStatuses  = ['Returned', 'Missing', 'Damaged'];
-  const inStockStatuses = ['In Stock', 'Consignment'];
+  // Compared in lower case: the sheet has both "Fix-Return" and "Fix-return"
+  const s = (masterStatus || '').trim().toLowerCase();
+  const soldStatuses    = ['sold', 'personal use', 'barter'];
+  const returnStatuses  = ['returned', 'missing', 'damaged'];
+  const inStockStatuses = ['in stock', 'consignment'];
 
+  if (inStockStatuses.includes(s)) return { type: 'instock', label: '' };
   if (soldStatuses.includes(s))    return { type: 'sold',    label: 'נמכרה / יצאה מהמלאי' };
   if (returnStatuses.includes(s))  return { type: 'sold',    label: 'הוחזרה לספק / חסרה' };
-  if (s === 'Inventory Reserved')  return { type: 'order',   label: 'הזמנת לקוחה - בחנות' };
-  if (s === 'Ordered')             return { type: 'order',   label: 'הוזמנה - בדרך' };
-  if (s === 'Order Reserved')      return { type: 'order',   label: 'הזמנת לקוחה - בדרך' };
-  if (s === 'Wish List' || s === 'Fix-Return') return { type: 'order', label: 'בהזמנה' };
-  if (inStockStatuses.includes(s)) return { type: 'instock', label: '' };
-  return { type: 'instock', label: '' }; // default
+  if (s === 'inventory reserved')  return { type: 'order',   label: 'הזמנת לקוחה - בחנות' };
+  if (s === 'ordered')             return { type: 'order',   label: 'הוזמנה - בדרך' };
+  if (s === 'order reserved')      return { type: 'order',   label: 'הזמנת לקוחה - בדרך' };
+  if (s === 'wish list' || s === 'fix-return') return { type: 'order', label: 'בהזמנה' };
+  // Anything else ("Other", "Cancelled", "Never Made", empty, a new status nobody mapped yet)
+  // is NOT in stock — it is treated as left inventory.
+  return { type: 'sold', label: 'יצאה מהמלאי' };
 }
 
 async function lookup() {
@@ -245,24 +264,25 @@ async function lookup() {
 
   resultDiv.innerHTML = `<div class="loading-card"><div class="spinner"></div>טוענת נתונים...</div>`;
 
-  const [masterRes, storageRes, toDisplayRes, toStorageRes] = await Promise.all(
+  const [inventoryRes, washRes, toDisplayRes, toDrawerRes, binRes] = await Promise.all(
     SHEETS.map(s => fetchCSV(s.name, s.gid))
   );
 
-  const failed = [masterRes, storageRes, toDisplayRes, toStorageRes].filter(r => r.error);
+  const failed = [inventoryRes, washRes, toDisplayRes, toDrawerRes, binRes].filter(r => r.error);
   if (failed.length) {
     showLoadError(failed);
     return;
   }
 
-  const masterRows     = masterRes.rows;
-  const storageRows    = storageRes.rows;
+  const inventoryRows  = inventoryRes.rows;
+  const washRows       = washRes.rows;
   const toDisplayRows  = toDisplayRes.rows;
-  const toStorageRows  = toStorageRes.rows;
+  const toDrawerRows   = toDrawerRes.rows;
+  const binRows        = binRes.rows;
 
   try {
-    // 1. Check MASTER_DATA (col C = index 2 is wig id, col D = index 3 is status)
-    const masterMatch = masterRows.slice(1).find(r => r[2] && r[2].trim() === id);
+    // 1. Full Inventory (col A = S/N, col B = status, col C = location)
+    const masterMatch = inventoryRows.slice(1).find(r => r[0] && r[0].trim() === id);
     if (!masterMatch) {
       resultDiv.innerHTML = `
         <div class="result-card c-error">
@@ -273,49 +293,60 @@ async function lookup() {
         </div>`;
       return;
     }
-    let masterStatus = masterMatch[3];
+    const masterStatus = masterMatch[1];
     const { type: masterType, label: masterLabel } = getMasterStatus(masterStatus);
 
+    // 2. סטטוס פאות (col A = S/N, col B = מגירה / חפיפה, col C = drawer it was actually placed in)
+    const washMatch = washRows.slice(1).find(r => r[0] && r[0].trim() === id);
+    const inWash = !!washMatch && (washMatch[1] || '').trim() === 'חפיפה';
+
+    // Bin List (col A = drawer, col B = S/N): the drawer this wig SHOULD be in
+    const binMatch = binRows.slice(1).find(r => r[1] && r[1].trim() === id);
+    const shouldBeIn = binMatch ? (binMatch[0] || '').trim() : '';
+
+    // The drawer it was actually placed in (written by Boost into col C of סטטוס פאות; only known for
+    // wigs placed with this app). Shown only on "in storage" cards, next to where it should be.
+    let drawerRows = [];
+    if (shouldBeIn) drawerRows.push(['אמורה להיות במגירה', shouldBeIn]);
+    if (washMatch && (washMatch[1] || '').trim() === 'מגירה') {
+      const placedD = (washMatch[2] || '').trim();
+      if (placedD) {
+        const differs = shouldBeIn && placedD !== shouldBeIn;
+        drawerRows.push(['נמצאת במגירה', differs ? `${placedD} ⚠ לא במגירה המתוכננת` : placedD]);
+      }
+    }
+
     if (masterType !== 'instock') {
-      // Check if also in חפיפה — if so, show delete option
-      const storageMatchSold = storageRows.slice(1).find(r => r[0] && r[0].trim() === id);
-      const isSoldAndWash = storageMatchSold && (storageMatchSold[1] || '').trim() === 'חפיפה';
-      showResult(id, masterType, masterLabel, '', '', null, null, isSoldAndWash);
+      // Not in stock — if it is also marked חפיפה, offer to clear the wash status
+      showResult(id, masterType, masterLabel, '', '', null, null, inWash);
       return;
     }
 
-    // 2. Check STORAGE_DATA (col A = index 0 is wig id, col B = index 1 is status)
-    const storageMatch = storageRows.slice(1).find(r => r[0] && r[0].trim() === id);
+    // 3. Current location: wash wins, otherwise Full Inventory (col C: STORAGE / DISPLAY)
+    const inventoryLoc = (masterMatch[2] || '').trim().toUpperCase();
     let currentLocation = 'בתצוגה'; // default
     let locType = 'none';
 
-    if (storageMatch) {
-      const storageStat = (storageMatch[1] || '').trim();
-      if (storageStat === 'מגירה') { currentLocation = 'באחסון'; locType = 'storage'; }
-      else if (storageStat === 'חפיפה') { currentLocation = 'בחפיפה'; locType = 'wash'; }
-    }
+    if (inWash) { currentLocation = 'בחפיפה'; locType = 'wash'; }
+    else if (inventoryLoc === 'STORAGE') { currentLocation = 'באחסון'; locType = 'storage'; }
 
-    // 3. Check the two action-pending tabs (previously one HELPER tab):
-    // "לתצוגה" = pending move to display, "לאחסון" = pending move to storage
-    // (col A = index 0 description, col B = index 1 wig id, col C = index 2 box/category;
-    // "לאחסון" also has a col D = index 3 "בוצע" done-checkbox — skip rows already marked TRUE)
-    const displayMatch = toDisplayRows.slice(1).find(r => r[1] && r[1].trim() === id);
-    const storageActionMatch = toStorageRows.slice(1).find(r =>
-      r[1] && r[1].trim() === id && (r[3] || '').trim().toUpperCase() !== 'TRUE'
-    );
+    // 4. The two action lists: "לתצוגה" = move to display, "למגירה" = move to a drawer
+    // (col A = S/N, col B = action, col C = drawer, col D = wig code, col E = drawer group)
+    const displayMatch = toDisplayRows.slice(1).find(r => r[0] && r[0].trim() === id);
+    const drawerMatch  = toDrawerRows.slice(1).find(r => r[0] && r[0].trim() === id);
 
     if (displayMatch) {
-      const desc = (displayMatch[0] || '').trim();
+      const desc = (displayMatch[3] || '').trim();
       const loc  = (displayMatch[2] || '').trim();
-      showResult(id, 'action', 'העברה לתצוגה', currentLocation, desc, 'פאה בתצוגה', loc, false, currentLocation);
-    } else if (storageActionMatch) {
-      const desc = (storageActionMatch[0] || '').trim();
-      const loc  = (storageActionMatch[2] || '').trim();
-      showResult(id, 'action', 'העברה לאחסון', currentLocation, desc, 'פאה במגירה', loc, false, currentLocation);
+      showResult(id, 'action', 'העברה לתצוגה', currentLocation, desc, 'פאה בתצוגה', loc, false, currentLocation, 'להוציא ממגירה');
+    } else if (drawerMatch) {
+      const desc = (drawerMatch[3] || '').trim();
+      const loc  = (drawerMatch[2] || '').trim() || shouldBeIn;
+      showResult(id, 'action', 'העברה לאחסון', currentLocation, desc, 'פאה במגירה', loc, false, currentLocation, 'מגירה', loc);
     } else {
       // No action needed — show current location
       const noActionText = locType === 'wash' ? 'בחפיפה' : 'אין שינוי נדרש';
-      showResult(id, locType === 'wash' ? 'wash' : locType === 'storage' ? 'storage' : 'none', noActionText, currentLocation, '', null, null);
+      showResult(id, locType === 'wash' ? 'wash' : locType === 'storage' ? 'storage' : 'none', noActionText, currentLocation, '', null, null, false, '', '', '', drawerRows);
     }
 
   } catch(e) {
@@ -344,7 +375,10 @@ function showLoadError(failed) {
     </div>`;
 }
 
-function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLoc, soldAndWash, webhookCurrentLoc) {
+// plannedDrawer: only for "move to a drawer" cards — the drawer the list asked for.
+// drawerRows: only for "no change" cards — [label, value] pairs: the drawer it should be in, and where it was placed.
+function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLoc, soldAndWash, webhookCurrentLoc, locLabel, plannedDrawer, drawerRows) {
+  locLabel = locLabel || 'מגירה';
   webhookCurrentLoc = webhookCurrentLoc || currentLocation || '';
   const cls = `c-${type}`;
   const badges = {
@@ -371,8 +405,11 @@ function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLo
     html += `<div class="detail-row"><span class="dk">מאפיינים</span><span class="dv">${desc}</span></div>`;
   }
   if (helperLoc) {
-    html += `<div class="detail-row"><span class="dk">מיקום / ארגז</span><span class="dv">${helperLoc}</span></div>`;
+    html += `<div class="detail-row"><span class="dk">${locLabel}</span><span class="dv">${helperLoc}</span></div>`;
   }
+  (drawerRows || []).forEach(([label, value]) => {
+    html += `<div class="detail-row"><span class="dk">${label}</span><span class="dv">${value}</span></div>`;
+  });
   html += `<div class="detail-row"><span class="dk">מזהה פאה</span><span class="dv">${id}</span></div>`;
 
   if (soldAndWash) {
@@ -385,7 +422,8 @@ function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLo
   } else if (type === 'wash') {
     html += `
       <button class="btn-confirm display" id="confirmBtn" onclick="confirmAction('${id}','פאה בתצוגה','העברה לתצוגה','${encodeURIComponent(desc)}','','${webhookCurrentLoc}')">✓ העברי לתצוגה</button>
-      <button class="btn-confirm" style="margin-top:8px;" onclick="confirmAction('${id}','פאה במגירה','העברה לאחסון','${encodeURIComponent(desc)}','','${webhookCurrentLoc}')">✓ העברי לאחסון</button>
+      <button class="btn-confirm" id="otherDrawerLink" style="margin-top:8px;" onclick="showOtherDrawer()">✓ העברי לאחסון</button>
+      ${drawerPickerHtml(`'${id}','פאה במגירה','העברה לאחסון','${encodeURIComponent(desc)}','','${webhookCurrentLoc}',''`, '')}
       <button class="btn-skip" onclick="reset()">השאירי כמו שזה</button>`;
   } else if (type === 'storage') {
     html += `
@@ -394,7 +432,16 @@ function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLo
   } else if (type === 'none') {
     html += `
       <button class="btn-stay" onclick="reset()">✓ השאירי כמו שזה</button>
-      <button class="btn-move-subtle" id="confirmBtn" onclick="confirmAction('${id}','פאה במגירה','להעביר לאחסון','${encodeURIComponent(desc)}','','${webhookCurrentLoc}')">העברי לאחסון</button>`;
+      <button class="btn-move-subtle" id="otherDrawerLink" onclick="showOtherDrawer()">העברי לאחסון</button>
+      ${drawerPickerHtml(`'${id}','פאה במגירה','להעביר לאחסון','${encodeURIComponent(desc)}','','${webhookCurrentLoc}',''`, '')}`;
+  } else if (zohoVal && plannedDrawer) {
+    // Move to a drawer: one tap if it went where the list said, otherwise pick the drawer it really went to
+    const common = `'${id}','${zohoVal}','${mainText}','${encodeURIComponent(desc)}','${encodeURIComponent(helperLoc || '')}','${webhookCurrentLoc}','${encodeURIComponent(plannedDrawer)}'`;
+    html += `
+      <button class="btn-confirm" id="confirmBtn" onclick="confirmAction(${common},'${encodeURIComponent(plannedDrawer)}')">✓ הנחתי במגירה ${plannedDrawer}</button>
+      <button class="btn-move-subtle" id="otherDrawerLink" onclick="showOtherDrawer()">הונחה במגירה אחרת</button>
+      ${drawerPickerHtml(common, plannedDrawer)}
+      <button class="btn-skip" onclick="reset()">השאירי כמו שזה</button>`;
   } else if (zohoVal) {
     html += `
       <button class="btn-confirm ${confirmCls}" id="confirmBtn" onclick="confirmAction('${id}','${zohoVal}','${mainText}','${encodeURIComponent(desc)}','${encodeURIComponent(helperLoc || '')}','${webhookCurrentLoc}')">✓ אישור — ביצעתי את הפעולה</button>
@@ -407,17 +454,67 @@ function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLo
   resultDiv.innerHTML = html;
 }
 
-async function confirmAction(wigId, zohoValue, action, descEnc, locEnc, currentLoc) {
-  const btn  = document.getElementById('confirmBtn');
+// The hidden "which drawer?" dropdown + confirm button (shown by showOtherDrawer).
+// `common` = the first seven arguments of confirmAction, `exclude` = a drawer to leave out of the list.
+function drawerPickerHtml(common, exclude) {
+  return `
+      <div id="otherDrawerBox" class="drawer-pick" style="display:none;">
+        <label class="field-label" for="drawerSelect">באיזו מגירה הונחה הפאה? (אות ומספר, לדוגמה A3)</label>
+        <input id="drawerSelect" type="text" maxlength="3" autocomplete="off" autocapitalize="characters" spellcheck="false"
+               placeholder="A3" oninput="checkDrawerInput('${exclude || ''}')" />
+        <div id="drawerError" class="drawer-error"></div>
+        <button class="btn-confirm" id="confirmOtherBtn" disabled onclick="confirmOtherDrawer(${common})">✓ הנחתי במגירה שהוקלדה</button>
+      </div>`;
+}
+
+function showOtherDrawer() {
+  document.getElementById('otherDrawerLink').style.display = 'none';
+  document.getElementById('otherDrawerBox').style.display = 'block';
+  document.getElementById('drawerSelect').focus();
+}
+
+// Enables the confirm button only for a real drawer code (letter A–O + number 1–7)
+function checkDrawerInput(planned) {
+  const box = document.getElementById('drawerSelect');
+  const err = document.getElementById('drawerError');
+  const btn = document.getElementById('confirmOtherBtn');
+  const value = normalizeDrawer(box.value);
+  let message = '';
+  if (value.length >= 2 && !isValidDrawer(value)) message = 'מגירה לא קיימת — אות A עד O ומספר 1 עד 7';
+  else if (planned && value === planned) message = 'זו המגירה המתוכננת — לחצי על "הנחתי במגירה ' + planned + '"';
+  err.textContent = message;
+  btn.disabled = !(isValidDrawer(value) && value !== planned);
+}
+
+// Same as confirmAction, but the drawer comes from the typed box instead of the list
+function confirmOtherDrawer(wigId, zohoValue, action, descEnc, locEnc, currentLoc, plannedEnc) {
+  const chosen = normalizeDrawer(document.getElementById('drawerSelect').value);
+  if (!isValidDrawer(chosen)) return;
+  confirmAction(wigId, zohoValue, action, descEnc, locEnc, currentLoc, plannedEnc, encodeURIComponent(chosen), 'confirmOtherBtn');
+}
+
+// plannedEnc / actualEnc: only for "move to a drawer" — the drawer the list asked for and the drawer it was really put in.
+async function confirmAction(wigId, zohoValue, action, descEnc, locEnc, currentLoc, plannedEnc, actualEnc, btnId) {
+  const btn  = document.getElementById(btnId || 'confirmBtn');
   const desc = decodeURIComponent(descEnc);
   const loc  = decodeURIComponent(locEnc);
+  const plannedDrawer = plannedEnc ? decodeURIComponent(plannedEnc) : '';
+  const actualDrawer  = actualEnc ? decodeURIComponent(actualEnc) : '';
+  const originalLabel = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'שולחת...';
   try {
     await fetch(WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wig_id: wigId, action, zoho_status: zohoValue, description: desc, location: loc, current_location: currentLoc || '', timestamp: new Date().toISOString() })
+      body: JSON.stringify({
+        wig_id: wigId, action, zoho_status: zohoValue, description: desc, location: loc,
+        current_location: currentLoc || '',
+        planned_drawer: plannedDrawer,
+        actual_drawer: actualDrawer,
+        drawer_changed: !!(plannedDrawer && actualDrawer && plannedDrawer !== actualDrawer),
+        timestamp: new Date().toISOString()
+      })
     });
     resultDiv.innerHTML = `
       <div class="result-card c-success" style="text-align:center;">
@@ -428,7 +525,7 @@ async function confirmAction(wigId, zohoValue, action, descEnc, locEnc, currentL
     setTimeout(reset, 2000);
   } catch(e) {
     btn.disabled = false;
-    btn.textContent = '✓ אישור — ביצעתי את הפעולה';
+    btn.textContent = originalLabel;
     alert('שגיאה בשליחה — בדקי חיבור ונסי שוב');
   }
 }
