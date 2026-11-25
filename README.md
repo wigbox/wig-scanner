@@ -36,6 +36,8 @@ If it was put somewhere else, tap **"הונחה במגירה אחרת"**, type t
 | `actual_drawer` | `A3` | The drawer it was really put in (same as planned when it went where asked) |
 | `drawer_changed` | `true` | `true` only when they differ |
 
+**Coming out of wash.** The card says what is expected. A wig with a drawer in `Bin List` shows "אחרי החפיפה: להעביר למגירה X" (one tap, or type the drawer it really went to). A wig with no drawer in `Bin List` shows "אחרי החפיפה: להעביר לתצוגה", with a second option to type a drawer if it goes into one. (The rule "no drawer in `Bin List` means display" matches how the sheet is built today: the 70 wigs meant for display are all absent from `Bin List`.)
+
 **Correcting a drawer.** On the "in storage, no change" card, **"הפאה במגירה אחרת — עדכני מגירה"** lets you type the drawer the wig is really in (for example after it was put in the wrong one). It sends `action` = `עדכון מגירה` with `current_location` = `באחסון`, and the Boost scenario's "update row" route accepts that word and rewrites column C. If the wig has no row in `סטטוס פאות`, nothing is updated.
 
 Other moves into storage (a wig on display, or coming out of wash, with no drawer on the list) also ask which drawer. The box is required, `planned_drawer` is empty and `actual_drawer` holds the choice. Moves to display do not ask for a drawer.

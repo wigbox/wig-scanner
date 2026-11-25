@@ -365,7 +365,13 @@ async function lookup() {
     } else {
       // No action needed — show current location
       const noActionText = locType === 'wash' ? 'בחפיפה' : 'אין שינוי נדרש';
-      showResult(id, locType === 'wash' ? 'wash' : locType === 'storage' ? 'storage' : 'none', noActionText, currentLocation, '', null, null, false, '', '', shouldBeIn, drawerRows);
+      // Out of wash: say where it goes. A drawer in Bin List -> that drawer; no drawer in Bin List -> display.
+      let washTitle;
+      if (locType === 'wash') {
+        washTitle = shouldBeIn ? `אחרי החפיפה: להעביר למגירה ${shouldBeIn}` : 'אחרי החפיפה: להעביר לתצוגה';
+        if (!shouldBeIn) drawerRows.push(['לאן?', 'לתצוגה — אין לפאה מגירה בטבלת המגירות']);
+      }
+      showResult(id, locType === 'wash' ? 'wash' : locType === 'storage' ? 'storage' : 'none', noActionText, currentLocation, '', null, null, false, '', '', shouldBeIn, drawerRows, washTitle);
     }
 
   } catch(e) {
@@ -440,11 +446,27 @@ function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLo
       <button class="btn-confirm display" id="confirmBtn" onclick="confirmAction('${id}','פאה בתצוגה','מחיקת סטטוס חפיפה','${encodeURIComponent(desc)}','','${webhookCurrentLoc}')">מחקי סטטוס חפיפה</button>
       <button class="btn-skip" onclick="reset()">השאירי כמו שזה</button>`;
   } else if (type === 'wash') {
-    html += `
-      <button class="btn-confirm display" id="confirmBtn" onclick="confirmAction('${id}','פאה בתצוגה','העברה לתצוגה','${encodeURIComponent(desc)}','','${webhookCurrentLoc}')">✓ העברי לתצוגה</button>
-      <button class="btn-confirm" id="otherDrawerLink" style="margin-top:8px;" onclick="showOtherDrawer()">✓ העברי לאחסון</button>
-      ${drawerPickerHtml(`'${id}','פאה במגירה','העברה לאחסון','${encodeURIComponent(desc)}','','${webhookCurrentLoc}',''`, '')}
+    // Coming out of wash. The title already says what is expected:
+    //   it has a drawer in Bin List -> that drawer (one tap, or type the drawer it really went to)
+    //   it has none               -> display (or type a drawer if it goes into one instead)
+    // 'העברה לתצוגה' / 'העברה לאחסון' with current_location 'בחפיפה' are the words Boost routes on — do not reword.
+    const enc = encodeURIComponent;
+    const toDisplayArgs = `'${id}','פאה בתצוגה','העברה לתצוגה','${enc(desc)}','','${webhookCurrentLoc}'`;
+    if (plannedDrawer) {
+      const toDrawerArgs = `'${id}','פאה במגירה','העברה לאחסון','${enc(desc)}','','${webhookCurrentLoc}','${enc(plannedDrawer)}'`;
+      html += `
+      <button class="btn-confirm" id="confirmBtn" onclick="confirmAction(${toDrawerArgs},'${enc(plannedDrawer)}')">✓ הנחתי במגירה ${plannedDrawer}</button>
+      <button class="btn-move-subtle" id="otherDrawerLink" onclick="showOtherDrawer()">הונחה במגירה אחרת</button>
+      ${drawerPickerHtml(toDrawerArgs, plannedDrawer)}
+      <button class="btn-move-subtle" id="confirmBtn2" onclick="confirmAction(${toDisplayArgs},'','','confirmBtn2')">היא הולכת לתצוגה במקום</button>
       <button class="btn-skip" onclick="reset()">השאירי כמו שזה</button>`;
+    } else {
+      html += `
+      <button class="btn-confirm display" id="confirmBtn" onclick="confirmAction(${toDisplayArgs})">✓ העברתי לתצוגה</button>
+      <button class="btn-move-subtle" id="otherDrawerLink" onclick="showOtherDrawer()">היא הולכת למגירה — הקלידי איזו</button>
+      ${drawerPickerHtml(`'${id}','פאה במגירה','העברה לאחסון','${enc(desc)}','','${webhookCurrentLoc}',''`, '', 'באיזו מגירה הונחה הפאה? (לדוגמה: A3, F5, O7)')}
+      <button class="btn-skip" onclick="reset()">השאירי כמו שזה</button>`;
+    }
   } else if (type === 'storage') {
     // In a drawer already: leave it, correct which drawer it is in, or move it to display.
     // Correcting sends action 'עדכון מגירה' — the Boost scenario has a filter for exactly this word (route "update row").
