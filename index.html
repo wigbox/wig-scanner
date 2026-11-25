@@ -258,6 +258,7 @@ function getMasterStatus(masterStatus) {
 }
 
 async function lookup() {
+  clearTimeout(resetTimer);   // don't let the previous "sent" card wipe this lookup
   const id = wigInput.value.trim();
   if (!id) { wigInput.focus(); return; }
   window.history.replaceState({}, document.title, window.location.pathname);
@@ -451,7 +452,7 @@ function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLo
     html += `
       <button class="btn-stay" onclick="reset()">✓ השאירי כמו שזה</button>
       <button class="btn-move-subtle" id="otherDrawerLink" onclick="showOtherDrawer()">הפאה במגירה אחרת — עדכני מגירה</button>
-      ${drawerPickerHtml(fixArgs, '', 'באיזו מגירה הפאה נמצאת עכשיו? (אות ומספר, לדוגמה A3)', '✓ עדכני את המגירה')}
+      ${drawerPickerHtml(fixArgs, '', 'באיזו מגירה הפאה נמצאת עכשיו? (אות A–O ומספר 1–7)', '✓ עדכני את המגירה')}
       <button class="btn-move-subtle" id="confirmBtn" onclick="confirmAction('${id}','פאה בתצוגה','העברה לתצוגה','${encodeURIComponent(desc)}','','${webhookCurrentLoc}')">העברי לתצוגה</button>`;
   } else if (type === 'none') {
     html += `
@@ -483,9 +484,9 @@ function showResult(id, type, mainText, currentLocation, desc, zohoVal, helperLo
 function drawerPickerHtml(common, exclude, question, buttonText) {
   return `
       <div id="otherDrawerBox" class="drawer-pick" style="display:none;">
-        <label class="field-label" for="drawerSelect">${question || 'באיזו מגירה הונחה הפאה? (אות ומספר, לדוגמה A3)'}</label>
+        <label class="field-label" for="drawerSelect">${question || 'באיזו מגירה הונחה הפאה? (אות A–O ומספר 1–7)'}</label>
         <input id="drawerSelect" type="text" maxlength="3" autocomplete="off" autocapitalize="characters" spellcheck="false"
-               placeholder="A3" oninput="checkDrawerInput('${exclude || ''}')" />
+               oninput="checkDrawerInput('${exclude || ''}')" />
         <div id="drawerError" class="drawer-error"></div>
         <button class="btn-confirm" id="confirmOtherBtn" disabled onclick="confirmOtherDrawer(${common})">${buttonText || '✓ הנחתי במגירה שהוקלדה'}</button>
       </div>`;
@@ -517,6 +518,8 @@ function confirmOtherDrawer(wigId, zohoValue, action, descEnc, locEnc, currentLo
   confirmAction(wigId, zohoValue, action, descEnc, locEnc, currentLoc, plannedEnc, encodeURIComponent(chosen), 'confirmOtherBtn');
 }
 
+let resetTimer = null;   // auto-clears the "sent" card; cancelled as soon as a new wig is looked up
+
 // plannedEnc / actualEnc: only for "move to a drawer" — the drawer the list asked for and the drawer it was really put in.
 async function confirmAction(wigId, zohoValue, action, descEnc, locEnc, currentLoc, plannedEnc, actualEnc, btnId) {
   const btn  = document.getElementById(btnId || 'confirmBtn');
@@ -540,13 +543,23 @@ async function confirmAction(wigId, zohoValue, action, descEnc, locEnc, currentL
         timestamp: new Date().toISOString()
       })
     });
+    // Say clearly where the wig went (the drawer, when there is one)
+    let where = '';
+    if (actualDrawer) where = action === 'עדכון מגירה' ? `המגירה עודכנה: ${actualDrawer}` : `הפאה הועברה למגירה ${actualDrawer}`;
+    else if (zohoValue === 'פאה בתצוגה') where = action === 'מחיקת סטטוס חפיפה' ? 'סטטוס החפיפה נמחק' : 'הפאה הועברה לתצוגה';
+    else if (zohoValue === 'פאה במגירה') where = 'הפאה הועברה לאחסון';
+    const plannedNote = (plannedDrawer && actualDrawer && plannedDrawer !== actualDrawer)
+      ? `<div class="detail-row"><span class="dk">מגירה מתוכננת</span><span class="dv">${plannedDrawer}</span></div>` : '';
     resultDiv.innerHTML = `
       <div class="result-card c-success" style="text-align:center;">
-        <span class="status-badge">נשלח</span>
-        <div class="result-action" style="font-size:20px;">✓ הפעולה נרשמה בהצלחה</div>
+        <span class="status-badge">נשלח · נרשם בהצלחה</span>
+        <div class="result-action" style="font-size:26px;">✓ ${where || 'הפעולה נרשמה'}</div>
         <div class="detail-row"><span class="dk">מזהה פאה</span><span class="dv">${wigId}</span></div>
+        ${plannedNote}
+        <button class="btn-skip" onclick="reset()" style="margin-top:14px;">← סריקה הבאה</button>
       </div>`;
-    setTimeout(reset, 2000);
+    clearTimeout(resetTimer);
+    resetTimer = setTimeout(reset, 7000);
   } catch(e) {
     btn.disabled = false;
     btn.textContent = originalLabel;
